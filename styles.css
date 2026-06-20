@@ -1,0 +1,468 @@
+/* Nord palette — https://www.nordtheme.com */
+:root {
+  /* Polar Night */
+  --n0: #2e3440;
+  --n1: #3b4252;
+  --n2: #434c5e;
+  --n3: #4c566a;
+  /* Snow Storm */
+  --n4: #d8dee9;
+  --n5: #e5e9f0;
+  --n6: #eceff4;
+  /* Frost */
+  --n7: #8fbcbb;
+  --n8: #88c0d0;
+  --n9: #81a1c1;
+  --n10: #5e81ac;
+  /* Aurora */
+  --red: #bf616a;
+  --orange: #d08770;
+  --yellow: #ebcb8b;
+  --green: #a3be8c;
+  --purple: #b48ead;
+
+  --bg: var(--n0);
+  --panel: #353c4a;     /* a hair lighter than n0 for sidebars */
+  --rail: #2b303b;      /* a hair darker for the activity rail */
+  --line: #3b4252;
+  --text: var(--n4);
+  --muted: #6f7a90;
+}
+
+* { box-sizing: border-box; }
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--n8); text-decoration: none; }
+button { font: inherit; }
+
+/* The IDE grid: activity | explorer | center | agent, status bar across the bottom. */
+.ide {
+  height: 100vh;
+  height: 100dvh;
+  display: grid;
+  grid-template-columns: 48px 220px minmax(0, 1fr) 340px;
+  grid-template-rows: minmax(0, 1fr) 24px;
+  grid-template-areas:
+    "activity explorer center agent"
+    "status   status   status status";
+}
+
+/* ── Activity bar ─────────────────────────────────────────────── */
+.activity {
+  grid-area: activity;
+  background: var(--rail);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.act {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: 0;
+  border-left: 2px solid transparent;
+  color: var(--n3);
+  cursor: pointer;
+}
+
+.act:hover { color: var(--n6); }
+.act.is-active { color: var(--n8); border-left-color: var(--n8); }
+.act-bottom { margin-top: auto; }
+.act svg { width: 23px; height: 23px; }
+
+/* ── Explorer / file tree ─────────────────────────────────────── */
+.explorer {
+  grid-area: explorer;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  overflow: auto;
+}
+
+.explorer-title {
+  padding: 12px 16px 8px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.tree-root {
+  padding: 2px 12px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--n4);
+}
+
+.files {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+
+.file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 28px;
+  font-size: 13px;
+  color: var(--n4);
+  cursor: pointer;
+  white-space: nowrap;
+  border-left: 2px solid transparent;
+}
+
+.file:hover { background: rgba(143, 188, 187, 0.08); }
+.file.is-active {
+  background: rgba(136, 192, 208, 0.12);
+  border-left-color: var(--n8);
+}
+.file svg { width: 16px; height: 16px; color: var(--n9); flex: none; }
+
+/* ── Center column: editor + terminal panel ───────────────────── */
+.center {
+  grid-area: center;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tabs {
+  display: flex;
+  background: var(--panel);
+  overflow-x: auto;
+  min-height: 38px;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
+  background: transparent;
+  border-right: 1px solid var(--line);
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tab.is-active {
+  background: var(--bg);
+  color: var(--n6);
+  box-shadow: inset 0 2px 0 var(--n8);
+}
+.tab svg { width: 15px; height: 15px; color: var(--n9); }
+.tab-close {
+  margin-left: 2px;
+  width: 17px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  opacity: 0.7;
+}
+.tab-close:hover { background: rgba(216, 222, 233, 0.14); opacity: 1; }
+
+.editor {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg);
+}
+
+/* The rendered document — proper typography, not raw markdown source. */
+.doc {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 44px 60px;
+  line-height: 1.7;
+  font-size: 15.5px;
+  color: var(--n4);
+}
+
+.doc h1 {
+  margin: 0 0 18px;
+  font-size: 2.1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--n6);
+}
+
+.doc h2 {
+  margin: 30px 0 8px;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--n8);
+}
+
+.doc p { margin: 0 0 16px; }
+
+.doc ul {
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.doc li {
+  position: relative;
+  padding-left: 22px;
+  margin-bottom: 10px;
+}
+
+.doc li::before {
+  content: "›";
+  position: absolute;
+  left: 4px;
+  color: var(--n8);
+}
+
+.doc a {
+  color: var(--n8);
+  border-bottom: 1px solid rgba(136, 192, 208, 0.35);
+}
+.doc a:hover { border-bottom-color: var(--n8); }
+
+.doc strong { color: var(--n6); font-weight: 600; }
+
+.doc .md-code {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.86em;
+  color: var(--n7);
+  background: rgba(136, 192, 208, 0.1);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* Empty editor: a quiet welcome. */
+.editor-empty {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: var(--muted);
+  padding: 24px;
+}
+.editor-empty h1 {
+  color: var(--n6);
+  font-weight: 700;
+  font-size: 2rem;
+  margin: 0 0 8px;
+}
+
+/* ── Terminal panel ───────────────────────────────────────────── */
+.panel {
+  height: 32%;
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.panel-tabs {
+  display: flex;
+  gap: 18px;
+  padding: 8px 18px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.panel-tab.is-active {
+  color: var(--n6);
+  box-shadow: inset 0 -1px 0 var(--n8);
+  padding-bottom: 6px;
+}
+
+.terminal-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 18px 14px;
+  font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.65;
+  cursor: text;
+}
+
+#output { white-space: pre-wrap; word-break: break-word; }
+.line { white-space: pre-wrap; }
+.muted { color: var(--muted); }
+.accent { color: var(--n8); }
+.green { color: var(--green); }
+.error { color: var(--red); }
+.terminal-body a { color: var(--n8); text-decoration: underline; }
+
+.promptline {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.ps1 { color: var(--green); white-space: pre; }
+#inputwrap { flex: 1 1 220px; display: flex; }
+#cmdline {
+  flex: 1;
+  min-width: 120px;
+  padding: 0 0 0 8px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--n5);
+  caret-color: var(--n8);
+  font: inherit;
+}
+
+/* ── Assistant chat ───────────────────────────────────────────── */
+.agent {
+  grid-area: agent;
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.agent-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+.agent-title svg { color: var(--n8); }
+
+.chat {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.msg {
+  font-size: 13px;
+  line-height: 1.55;
+  padding: 10px 12px;
+  border-radius: 12px;
+  max-width: 92%;
+}
+.msg.bot {
+  background: var(--n1);
+  color: var(--n4);
+  align-self: flex-start;
+  border-top-left-radius: 3px;
+}
+.msg.user {
+  background: var(--n10);
+  color: var(--n6);
+  align-self: flex-end;
+  border-top-right-radius: 3px;
+}
+.msg.bot p { margin: 0 0 6px; }
+.msg.bot p:last-child { margin: 0; }
+.msg code,
+.msg .md-code {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.85em;
+  color: var(--n7);
+  background: rgba(136, 192, 208, 0.12);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.chat-suggest {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 10px;
+}
+.chat-chip {
+  font-size: 12.5px;
+  padding: 6px 12px;
+  border: 1px solid var(--n3);
+  border-radius: 999px;
+  color: var(--n4);
+  background: none;
+  cursor: pointer;
+}
+.chat-chip:hover { background: var(--n2); color: var(--n6); border-color: var(--n8); }
+
+.chat-form {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+}
+.chat-form input {
+  flex: 1;
+  background: var(--n1);
+  border: 1px solid var(--n2);
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: var(--n5);
+  outline: none;
+}
+.chat-form input:focus { border-color: var(--n8); }
+.chat-form button {
+  width: 38px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--n10);
+  color: var(--n6);
+  cursor: pointer;
+}
+.chat-form button:hover { background: var(--n9); }
+
+/* ── Status bar ───────────────────────────────────────────────── */
+.statusbar {
+  grid-area: status;
+  background: var(--n10);
+  color: var(--n6);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  font-size: 12px;
+}
+.status-left,
+.status-right { display: flex; gap: 16px; }
+
+/* ── Responsive: drop the side panels on smaller screens ──────── */
+@media (max-width: 1080px) {
+  .ide { grid-template-columns: 48px 220px minmax(0, 1fr); }
+  .agent { display: none; }
+}
+
+@media (max-width: 760px) {
+  .ide { grid-template-columns: 40px minmax(0, 1fr); }
+  .explorer { display: none; }
+  .act { width: 40px; }
+  .doc { padding: 28px 22px 48px; }
+}
