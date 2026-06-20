@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>dongzhewei.com</title>
+<meta name="description" content="Dongzhe Wei — software engineer. A small Linux-like machine on the web." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  /* ===========================================================================
+     Terminal look & feel.
+
+     The whole site is one machine. We avoid portfolio-card clutter: there is a
+     single column, a soft-dark background (not pure black), and one restrained
+     accent (amber-green). Everything is JetBrains Mono so the page reads as a
+     genuine terminal rather than a terminal widget pasted into a template.
+     =========================================================================== */
+  :root {
+    --bg: #11140f;          /* soft dark, faintly warm — not pure black */
+    --bg-glow: #161a13;
+    --fg: #cdd3c4;          /* dim phosphor white */
+    --fg-dim: #7e8775;      /* secondary metadata */
+    --accent: #9ece6a;      /* restrained green */
+    --accent-amber: #e0af68;
+    --prompt: #7aa2f7;      /* the only cool tone, reserved for the prompt user */
+    --error: #f7768e;
+    --selection: #2d3a22;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 15px;
+    line-height: 1.55;
+    height: 100%;
+  }
+
+  ::selection { background: var(--selection); }
+
+  /* A barely-there scanline / vignette so the dark background has depth without
+     resorting to gradients or blobs. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(ellipse at 50% 0%, var(--bg-glow) 0%, var(--bg) 70%);
+    z-index: 0;
+  }
+
+  #screen {
+    position: relative;
+    z-index: 1;
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 28px 20px 80px;
+    min-height: 100vh;
+  }
+
+  /* The terminal output stream. */
+  #output { white-space: pre-wrap; word-break: break-word; }
+
+  .line { white-space: pre-wrap; }
+
+  .muted { color: var(--fg-dim); }
+  .accent { color: var(--accent); }
+  .amber { color: var(--accent-amber); }
+  .error { color: var(--error); }
+
+  a, .link {
+    color: var(--accent-amber);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--accent-amber);
+    cursor: pointer;
+  }
+  a:hover, .link:hover { color: var(--fg); border-bottom-color: var(--fg); }
+
+  /* The prompt line. We build it from spans so the typed input shares the exact
+     baseline and metrics of the rendered transcript above it. */
+  .promptline { display: flex; align-items: baseline; flex-wrap: wrap; }
+
+  .ps1 { color: var(--prompt); white-space: pre; }
+  .ps1 .host { color: var(--accent); }
+  .ps1 .path { color: var(--accent-amber); }
+
+  #inputwrap { flex: 1 1 200px; position: relative; display: flex; }
+
+  #cmdline {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--fg);
+    font: inherit;
+    caret-color: var(--accent);
+    padding: 0 0 0 8px;
+  }
+
+  /* Blinking block cursor for the idle hint (the real caret handles typing). */
+  @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+
+  .neofetch { display: flex; gap: 18px; flex-wrap: wrap; }
+  .neofetch .logo { color: var(--accent); }
+  .neofetch .info .key { color: var(--accent-amber); }
+
+  /* Keep the freshly-run command visible at the top of the fold on submit. */
+  html { scroll-behavior: smooth; }
+
+  @media (max-width: 520px) {
+    html, body { font-size: 13.5px; }
+    #screen { padding: 18px 14px 70px; }
+  }
+</style>
+</head>
+<body>
+  <main id="screen" aria-label="dongzhewei.com terminal">
+    <div id="output"></div>
+
+    <!-- The live, interactive prompt. Clicking anywhere on the screen focuses
+         the input so the page behaves like a real terminal. -->
+    <div class="promptline" id="liveprompt">
+      <span class="ps1"><span class="user">guest</span>@<span class="host">dongzhewei</span>:<span class="path">~</span>$</span>
+      <span id="inputwrap">
+        <input
+          id="cmdline"
+          type="text"
+          autocomplete="off"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck="false"
+          aria-label="terminal command input"
+        />
+      </span>
+    </div>
+  </main>
+
+<script>
+/* =============================================================================
+   dongzhewei.com — the machine.
+
+   This is deliberately one file. The spec asks for a walking skeleton: prove the
+   terminal interaction in the browser before introducing any abstraction. So the
+   profile content, the command table, and the rendering loop all live here in
+   top-to-bottom narrative order. When the real /api/agi endpoint arrives (spec
+   step 5), only the `agi` branch needs to learn how to make a fetch.
+   ============================================================================= */
+
+// -----------------------------------------------------------------------------
+// Profile content
+//
+// Single source of truth for everything the machine knows about Dongzhe. The
+// `agi` command also reads from here, so the static assistant can never claim
+// something the `cat`/`ls` commands would contradict.
+// -----------------------------------------------------------------------------
+const PROFILE = {
+  name: "Dongzhe Wei",
+  intro:
+    "Software engineer building practical tools for learning, automation, and applied AI.",
+  about:
+    "I'm Dongzhe Wei, a software engineer. I like small, sharp tools that do one\n" +
+    "thing well, and I tend to build the walking skeleton before the cathedral.\n" +
+    "Most of my work lives at the intersection of learning, automation, and\n" +
+    "applied AI — turning fuzzy human problems into something a machine can run.",
+  now:
+    "Currently focused on:\n" +
+    "  - An Anki-style study app (spaced repetition, but less fiddly).\n" +
+    "  - Profile-aware agents that stay grounded in real context.\n" +
+    "  - This machine: dongzhewei.com as a terminal you can actually talk to.",
+  contact: [
+    { key: "email",  label: "dongzhewei37@gmail.com", href: "mailto:dongzhewei37@gmail.com" },
+    { key: "github", label: "github.com/dongzhewei",   href: "https://github.com/dongzhewei" },
+  ],
+  projects: [
+    { name: "anki-study",   note: "Spaced-repetition study app. Lives at /anki." },
+    { name: "profile-agi",  note: "The grounded assistant behind the `agi` command." },
+    { name: "dongzhewei.com", note: "This site — a small Linux-like machine on the web." },
+  ],
+  apps: [
+    { name: "anki", note: "Study app", href: "/anki" },
+  ],
+};
+
+// -----------------------------------------------------------------------------
+// Boot transcript
+//
+// The first viewport must read as a finished login session (spec "First
+// Screen"). We render this verbatim on load, then hand control to the live
+// prompt. It is plain data so the visual and the interactive paths share one
+// renderer.
+// -----------------------------------------------------------------------------
+const LAST_LOGIN = "Sat Jun 20 2026";
+
+const BOOT = [
+  { html: `<span class="muted">dongzhewei.com tty1</span>` },
+  { html: `` },
+  { html: `<span class="muted">login: guest</span>` },
+  { html: `<span class="muted">Last login: ${LAST_LOGIN}</span>` },
+  { html: `` },
+  { cmd: "whoami" },
+  { run: "whoami" },
+  { html: `` },
+  { cmd: "cat intro.txt" },
+  { run: "cat intro.txt" },
+  { html: `` },
+  { cmd: "ls" },
+  { run: "ls" },
+  { html: `` },
+  { cmd: "help" },
+  { run: "help" },
+  { html: `` },
+];
+
+// -----------------------------------------------------------------------------
+// Tiny rendering helpers
+// -----------------------------------------------------------------------------
+const outputEl = document.getElementById("output");
+const inputEl = document.getElementById("cmdline");
+
+// HTML-escape anything that originates from user input or free-form profile
+// text before it touches innerHTML. The command outputs below build their own
+// trusted markup; user echoes always go through here.
+function esc(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function printHTML(html) {
+  const div = document.createElement("div");
+  div.className = "line";
+  div.innerHTML = html;
+  outputEl.appendChild(div);
+}
+
+// Echo a command the way a shell does: reproduce the prompt, then the command.
+function echoPrompt(cmd) {
+  printHTML(
+    `<span class="ps1"><span style="color:var(--prompt)">guest</span>@` +
+      `<span class="accent">dongzhewei</span>:` +
+      `<span class="amber">~</span>$</span> ${esc(cmd)}`
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Command table
+//
+// Each command is a function returning an HTML string (or "" for no output).
+// Keeping them in a flat object is the whole "router" — no framework, no
+// registry. `agi` is just another entry here, which is the point of the spec:
+// it should feel like a Linux command, not a chatbot.
+// -----------------------------------------------------------------------------
+const HISTORY = [];
+
+const COMMANDS = {
+  help() {
+    return [
+      `Commands:`,
+      `  <span class="accent">man dongzhe</span>       read the profile manual`,
+      `  <span class="accent">cat about.txt</span>     short bio`,
+      `  <span class="accent">cat now.txt</span>       current focus`,
+      `  <span class="accent">ls projects</span>       selected work`,
+      `  <span class="accent">ls apps</span>           personal tools`,
+      `  <span class="accent">open anki</span>         launch study app`,
+      `  <span class="accent">agi &lt;question&gt;</span>    ask the local profile agent`,
+      ``,
+      `Also: <span class="muted">whoami, pwd, ls, cat contact.txt, neofetch, fortune,`,
+      `      history, uptime, clear</span>`,
+    ].join("\n");
+  },
+
+  whoami() {
+    return esc(PROFILE.name);
+  },
+
+  pwd() {
+    return `/home/guest`;
+  },
+
+  ls(args) {
+    const target = (args[0] || "").replace(/\/$/, "");
+    if (target === "projects") {
+      return PROFILE.projects
+        .map((p) => `<span class="accent">${esc(p.name)}</span>  <span class="muted">${esc(p.note)}</span>`)
+        .join("\n");
+    }
+    if (target === "apps") {
+      return PROFILE.apps
+        .map(
+          (a) =>
+            `<span class="accent">${esc(a.name)}</span>  <span class="muted">${esc(a.note)}</span>  ` +
+            `<span class="link" data-open="${esc(a.href)}">${esc(a.href)}</span>`
+        )
+        .join("\n");
+    }
+    if (target) {
+      return `<span class="error">ls: cannot access '${esc(target)}': No such file or directory</span>`;
+    }
+    // Bare `ls` — the top-level listing from the spec's first screen.
+    return (
+      `<span class="amber">about.txt  now.txt  contact.txt</span>  ` +
+      `<span class="accent">projects/  apps/</span>`
+    );
+  },
+
+  cat(args) {
+    const file = args[0] || "";
+    switch (file) {
+      case "intro.txt":   return esc(PROFILE.intro);
+      case "about.txt":   return esc(PROFILE.about);
+      case "now.txt":     return esc(PROFILE.now);
+      case "contact.txt":
+        return PROFILE.contact
+          .map(
+            (c) =>
+              `<span class="amber">${esc(c.key.padEnd(7))}</span> ` +
+              `<a href="${esc(c.href)}"${c.href.startsWith("http") ? ' target="_blank" rel="noopener"' : ""}>${esc(c.label)}</a>`
+          )
+          .join("\n");
+      case "":
+        return `<span class="error">cat: missing file operand</span>`;
+      default:
+        return `<span class="error">cat: ${esc(file)}: No such file or directory</span>`;
+    }
+  },
+
+  open(args) {
+    const target = args[0] || "";
+    if (target === "anki") {
+      printHTML(`<span class="muted">Launching study app at <span class="link" data-open="/anki">/anki</span> ...</span>`);
+      // The Anki app is a separate application (spec) — we just navigate to it.
+      setTimeout(() => { window.location.href = "/anki"; }, 600);
+      return "";
+    }
+    if (!target) return `<span class="error">open: what should I open? Try <span class="accent">open anki</span></span>`;
+    return `<span class="error">open: '${esc(target)}': nothing to open. Try <span class="accent">open anki</span></span>`;
+  },
+
+  man(args) {
+    if (args[0] !== "dongzhe") {
+      return `<span class="error">No manual entry for ${esc(args[0] || "(nothing)")}. Try <span class="accent">man dongzhe</span></span>`;
+    }
+    return [
+      `<span class="muted">DONGZHE(1)              Personal Manual              DONGZHE(1)</span>`,
+      ``,
+      `<span class="amber">NAME</span>`,
+      `    ${esc(PROFILE.name)} — software engineer`,
+      ``,
+      `<span class="amber">SYNOPSIS</span>`,
+      `    dongzhe [--build practical-tools] [--domain learning|automation|ai]`,
+      ``,
+      `<span class="amber">DESCRIPTION</span>`,
+      `    ${esc(PROFILE.intro)}`,
+      ``,
+      indent(PROFILE.about),
+      ``,
+      `<span class="amber">CURRENTLY</span>`,
+      indent(PROFILE.now),
+      ``,
+      `<span class="amber">CONTACT</span>`,
+      PROFILE.contact
+        .map((c) => `    <a href="${esc(c.href)}"${c.href.startsWith("http") ? ' target="_blank" rel="noopener"' : ""}>${esc(c.label)}</a>`)
+        .join("\n"),
+      ``,
+      `<span class="muted">See also: <span class="accent">ls projects</span>, <span class="accent">agi</span>(1)</span>`,
+    ].join("\n");
+  },
+
+  // --- Fun commands ----------------------------------------------------------
+
+  neofetch() {
+    // ASCII portrait of the machine. The art column and info column are kept in
+    // a flex row so they survive narrow screens by wrapping rather than tearing.
+    const logo = [
+      "       _.-=-._",
+      "    .-'  d w  '-.",
+      "   /   .-----.   \\",
+      "  |   | >_    |   |",
+      "  |   |  agi  |   |",
+      "   \\   '-----'   /",
+      "    '-._______.-'",
+    ].join("\n");
+    const info = [
+      `<span class="key">guest@dongzhewei</span>`,
+      `-----------------`,
+      `<span class="key">OS</span>      dongzhewei.com (web tty)`,
+      `<span class="key">Host</span>    DigitalOcean droplet`,
+      `<span class="key">Kernel</span>  human/6.20-engineer`,
+      `<span class="key">Shell</span>   dwsh`,
+      `<span class="key">Role</span>    Software Engineer`,
+      `<span class="key">Focus</span>   learning · automation · applied AI`,
+      `<span class="key">Apps</span>    anki`,
+    ].join("\n");
+    return (
+      `<div class="neofetch">` +
+      `<pre class="logo" style="margin:0">${logo}</pre>` +
+      `<pre class="info" style="margin:0">${info}</pre>` +
+      `</div>`
+    );
+  },
+
+  fortune() {
+    const fortunes = [
+      "Build the walking skeleton before the cathedral.",
+      "Duplication is cheaper than the wrong abstraction.",
+      "The best UI is the one you already know how to use.",
+      "A grounded agent says 'I don't know' on purpose.",
+      "Ship the 10-line version first.",
+      "Make it work end-to-end, then make it nice.",
+    ];
+    return esc(fortunes[Math.floor(Math.random() * fortunes.length)]);
+  },
+
+  history() {
+    if (HISTORY.length === 0) return `<span class="muted">(no history yet)</span>`;
+    return HISTORY.map((h, i) => `${String(i + 1).padStart(4)}  ${esc(h)}`).join("\n");
+  },
+
+  uptime() {
+    // A small joke that still answers honestly: this machine boots on load.
+    const secs = Math.max(1, Math.round((Date.now() - BOOT_TIME) / 1000));
+    return `up ${secs}s,  1 user,  load average: 0.10, 0.05, 0.01`;
+  },
+
+  sudo(args) {
+    if (args.join(" ") === "hire dongzhe") {
+      return [
+        `<span class="accent">[sudo] password for guest:</span> <span class="muted">··········</span>`,
+        ``,
+        `Permission granted. Excellent decision.`,
+        ``,
+        `Reach out: <a href="mailto:${esc(PROFILE.contact[0].label)}">${esc(PROFILE.contact[0].label)}</a>`,
+        `Or run <span class="accent">cat contact.txt</span>.`,
+      ].join("\n");
+    }
+    return `<span class="error">guest is not in the sudoers file. This incident will be reported.</span>`;
+  },
+
+  clear() {
+    outputEl.innerHTML = "";
+    return "";
+  },
+
+  // --- The local profile agent ----------------------------------------------
+  //
+  // For now this is the static, context-grounded responder the spec asks for
+  // (step 4). It only knows this machine; anything off-profile gets the canonical
+  // "context miss" redirect. Step 5 will swap this body for a fetch to /api/agi
+  // while keeping the same command surface.
+  agi(args) {
+    const q = args.join(" ").trim();
+    if (!q) {
+      return `agi: usage: <span class="accent">agi &lt;question&gt;</span>   e.g. <span class="accent">agi what are you working on?</span>`;
+    }
+    return staticAgi(q);
+  },
+};
+
+// Indent a multi-line block under a man-page heading.
+function indent(text) {
+  return text.split("\n").map((l) => "    " + esc(l)).join("\n");
+}
+
+// -----------------------------------------------------------------------------
+// Static `agi` brain
+//
+// Keyword routing over the profile. This is intentionally dumb: it matches a few
+// intents and otherwise emits the spec's exact "context miss" line. Being honest
+// about its limits is the whole personality.
+// -----------------------------------------------------------------------------
+function staticAgi(q) {
+  const s = q.toLowerCase();
+  const has = (...ws) => ws.some((w) => s.includes(w));
+  const reply = (body) => `<span class="muted">agi:</span> ${body}`;
+
+  if (has("who are you", "who is", "whoami", "your name", "about you", "tell me about")) {
+    return reply(esc(PROFILE.intro) + `\n     Run <span class="accent">man dongzhe</span> for the full manual.`);
+  }
+  if (has("working on", "now", "current", "focus", "lately", "these days")) {
+    return reply(esc(PROFILE.now));
+  }
+  if (has("project", "work", "built", "build", "portfolio")) {
+    return reply(
+      `Selected work:\n` +
+        PROFILE.projects.map((p) => `     - ${esc(p.name)}: ${esc(p.note)}`).join("\n") +
+        `\n     See <span class="accent">ls projects</span>.`
+    );
+  }
+  if (has("app", "anki", "study", "tool")) {
+    return reply(`There's a study app — run <span class="accent">open anki</span> or <span class="accent">ls apps</span>.`);
+  }
+  if (has("contact", "email", "reach", "hire", "github", "linkedin", "get in touch")) {
+    return reply(`Run <span class="accent">cat contact.txt</span>. Email: <a href="mailto:${esc(PROFILE.contact[0].label)}">${esc(PROFILE.contact[0].label)}</a>.`);
+  }
+  if (has("hello", "hi ", "hey", "yo ") || s === "hi" || s === "hey" || s === "yo") {
+    return reply(`Hello. I'm the local profile agent. Ask me about Dongzhe's work, focus, or projects.`);
+  }
+  if (has("ai", "agent", "llm", "model")) {
+    return reply(`Applied AI is one of Dongzhe's focuses — including me, the grounded agent behind this prompt. <span class="accent">cat now.txt</span>.`);
+  }
+
+  // Canonical redirect (verbatim from the spec).
+  return `<span class="muted">agi: context miss. I only know this machine. Try <span class="accent">ls</span> or <span class="accent">man dongzhe</span>.</span>`;
+}
+
+// -----------------------------------------------------------------------------
+// The execution loop
+// -----------------------------------------------------------------------------
+const BOOT_TIME = Date.now();
+
+// Parse + dispatch a single command line. Multi-word commands like
+// `cat about.txt` split into (verb, args). Unknown verbs get the classic
+// shell error with a nudge toward `help`.
+function execute(raw) {
+  const line = raw.trim();
+  if (!line) return;
+
+  const parts = line.split(/\s+/);
+  const verb = parts[0];
+  const args = parts.slice(1);
+
+  const fn = COMMANDS[verb];
+  let html;
+  if (fn) {
+    html = fn(args);
+  } else {
+    html = `<span class="error">${esc(verb)}: command not found</span>. Try <span class="accent">help</span>.`;
+  }
+  if (html) printHTML(html);
+}
+
+// Render the boot transcript on load: a finished login session, top of fold.
+function boot() {
+  for (const step of BOOT) {
+    if ("html" in step) {
+      printHTML(step.html);
+    } else if (step.cmd) {
+      echoPrompt(step.cmd);
+    } else if (step.run) {
+      const parts = step.run.split(/\s+/);
+      const out = COMMANDS[parts[0]](parts.slice(1));
+      if (out) printHTML(out);
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Wiring: input, history navigation, click-to-focus, delegated link opening
+// -----------------------------------------------------------------------------
+let histIndex = -1; // -1 means "current line, not browsing history"
+
+inputEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    const raw = inputEl.value;
+    echoPrompt(raw);
+    if (raw.trim()) HISTORY.push(raw.trim());
+    execute(raw);
+    inputEl.value = "";
+    histIndex = -1;
+    // Keep the live prompt in view after output grows.
+    requestAnimationFrame(() => inputEl.scrollIntoView({ block: "end" }));
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    if (HISTORY.length === 0) return;
+    if (histIndex === -1) histIndex = HISTORY.length;
+    histIndex = Math.max(0, histIndex - 1);
+    inputEl.value = HISTORY[histIndex] || "";
+  } else if (e.key === "ArrowDown") {
+    e.preventDefault();
+    if (histIndex === -1) return;
+    histIndex++;
+    if (histIndex >= HISTORY.length) { histIndex = -1; inputEl.value = ""; }
+    else inputEl.value = HISTORY[histIndex];
+  } else if (e.key === "l" && e.ctrlKey) {
+    e.preventDefault();
+    COMMANDS.clear();
+  }
+});
+
+// Real terminals focus on click anywhere. We skip refocus when the user is
+// selecting text or clicking an actual link.
+document.addEventListener("click", (e) => {
+  const opener = e.target.closest("[data-open]");
+  if (opener) {
+    const href = opener.getAttribute("data-open");
+    if (href.startsWith("http")) window.open(href, "_blank", "noopener");
+    else window.location.href = href;
+    return;
+  }
+  if (e.target.tagName === "A") return;
+  if (window.getSelection().toString()) return;
+  inputEl.focus();
+});
+
+// -----------------------------------------------------------------------------
+// Go.
+// -----------------------------------------------------------------------------
+boot();
+inputEl.focus();
+</script>
+</body>
+</html>
